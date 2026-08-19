@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#6b3f1d" />
+    <title>Billy Bob Joe Bob and the Chocolate Banjo</title>
+    <meta
+      name="description"
+      content="Help Billy Bob Joe Bob win six banjo duels around the Giga-Mart Wholesale Club before his chocolate banjo melts. Plays with an Xbox controller, a keyboard or a phone."
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #17100a;
+        /* A five-year-old will mash a touchscreen. Don't let the page move. */
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        outline: none;
+      }
+      #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      /* Boot splash. Stays up until a frame has actually RENDERED, not merely
+         until the modules have run — a frozen page shows the last thing it
+         PAINTED, so hiding this early makes a stall look like a black screen. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: 24px;
+        text-align: center;
+        background:
+          radial-gradient(circle at 50% 32%, #d9a05b 0%, #a4682e 45%, #4a2a12 100%);
+        color: #fff5e6;
+        font-family: 'Baloo 2', 'Comic Sans MS', 'Trebuchet MS', system-ui, sans-serif;
+        transition: opacity 0.55s ease;
+      }
+      #boot.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot .banjo {
+        font-size: clamp(46px, 10vw, 108px);
+        animation: strum 1.2s ease-in-out infinite;
+      }
+      @keyframes strum {
+        0%,
+        100% {
+          transform: rotate(-8deg) translateY(0);
+        }
+        50% {
+          transform: rotate(6deg) translateY(-12px);
+        }
+      }
+      #boot h1 {
+        margin: 0;
+        font-size: clamp(22px, 5.2vw, 60px);
+        font-weight: 900;
+        line-height: 1.1;
+        letter-spacing: 0.5px;
+        text-shadow: 0 5px 0 #4a2a12, 0 10px 22px rgba(0, 0, 0, 0.4);
+      }
+      #boot h2 {
+        margin: -10px 0 0;
+        font-size: clamp(13px, 2.6vw, 24px);
+        font-weight: 700;
+        opacity: 0.85;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      #boot .bar {
+        width: min(420px, 66vw);
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.28);
+        overflow: hidden;
+        box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+      }
+      #boot .bar > i {
+        display: block;
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #ffd97a, #ff9f1c);
+        transition: width 0.3s ease;
+      }
+      #boot p {
+        margin: 0;
+        font-size: clamp(12px, 2.2vw, 20px);
+        opacity: 0.9;
+      }
+
+      #fatal {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 32px;
+        background: #3a2110;
+        color: #fff5e6;
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      #fatal pre {
+        max-width: 90vw;
+        max-height: 40vh;
+        overflow: auto;
+        text-align: left;
+        background: rgba(0, 0, 0, 0.35);
+        padding: 14px;
+        border-radius: 12px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui"></div>
+
+    <div id="boot">
+      <div class="banjo">🪕</div>
+      <h1>BILLY BOB JOE BOB</h1>
+      <h2>and the Chocolate Banjo</h2>
+      <div class="bar"><i id="boot-bar"></i></div>
+      <p id="boot-msg">Opening the store…</p>
+    </div>
+
+    <div id="fatal">
+      <h2>The banjo broke a string 🪕</h2>
+      <pre id="fatal-msg"></pre>
+      <p>Refresh the page to try again.</p>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
