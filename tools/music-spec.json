@@ -1,0 +1,74 @@
+[
+  {
+    "name": "store-d",
+    "bpm": 132,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 60,
+    "seed": 364953287,
+    "caption": "light-hearted bluegrass banjo shuffle, five-string banjo picking a steady roll, plucked upright bass, soft brushed acoustic guitar, wooden spoons and hand claps, cartoon comedy caper, bouncy and mischievous, instrumental, no vocals"
+  },
+  {
+    "name": "duel-a",
+    "bpm": 146,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 45,
+    "seed": 4404,
+    "caption": "fast bluegrass banjo showdown, sparse and driving, punchy upright bass, mandolin chop on the backbeat, tense but playful, leaves space for a lead instrument, instrumental, no vocals, no drum kit"
+  },
+  {
+    "name": "finale-a",
+    "bpm": 152,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 45,
+    "seed": 5505,
+    "caption": "triumphant bluegrass hoedown finale, full string band, blazing five-string banjo, fiddle, mandolin, upright bass, acoustic guitar, celebratory barn-dance energy, joyful and big, instrumental, no vocals"
+  },
+  {
+    "name": "store-a",
+    "bpm": 132,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 60,
+    "seed": 1101,
+    "caption": "cheerful bluegrass instrumental, five-string banjo playing Scruggs-style forward rolls as the lead, walking upright bass, gentle acoustic guitar boom-chuck, light mandolin chop, bright and sunny, playful cartoon feel, family friendly, no vocals, no drum kit, clean studio recording"
+  },
+  {
+    "name": "store-b",
+    "bpm": 132,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 60,
+    "seed": 2202,
+    "caption": "happy old-time country porch music, clawhammer five-string banjo lead with rolling picking patterns, upright bass on the root and fifth, rhythm acoustic guitar, warm and relaxed, whimsical children's cartoon soundtrack, instrumental, no singing, no percussion kit"
+  },
+  {
+    "name": "store-c",
+    "bpm": 132,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 60,
+    "seed": 3303,
+    "caption": "upbeat bluegrass banjo instrumental in G major, driving three-finger banjo roll, fiddle countermelody, standup bass, brushed acoustic guitar, toe-tapping and good-natured, comedic grocery-store shopping music, no vocals"
+  },
+  {
+    "name": "store-e",
+    "bpm": 132,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 60,
+    "seed": 7707,
+    "caption": "warm folk banjo instrumental, gentle rolling five-string banjo, soft double bass, fingerpicked acoustic guitar, sweet and easygoing, background music for a children's animated show, G major, no vocals, no drums"
+  },
+  {
+    "name": "store-f",
+    "bpm": 132,
+    "key": "G major",
+    "timesig": "4/4",
+    "duration": 60,
+    "seed": 8808,
+    "caption": "energetic banjo hoedown, fast three-finger banjo rolls trading with a fiddle, slapped upright bass, rhythm guitar, hillbilly cartoon chase energy, bright and funny, instrumental, no vocals"
+  }
+]

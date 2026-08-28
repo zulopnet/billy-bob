@@ -7,7 +7,9 @@ duel and they join your band for the show on the Free Sample Stage.
 
 Plays with an Xbox controller, a keyboard, or a phone in landscape. **Co-op**:
 two players split-screen on one television, or up to four over the internet. No
-art assets: every mesh, texture and sound is generated in code at runtime.
+art assets: every mesh, texture and sound effect is generated in code at runtime.
+The exception is the three backing loops, which are generated banjo recordings —
+see [The music](#the-music).
 
 Live at <https://zulop.net/games/billy-bob/>.
 
@@ -172,6 +174,55 @@ finding a mode you can miss.
 
 ---
 
+## The music
+
+Three backing beds — `store`, `duel` and `finale` — plus every duel note, live in
+`core/Audio.js`.
+
+Every duel note is synthesised — a Karplus-Strong plucked string rendered
+offline per pitch, sequenced by a lookahead scheduler that hands the audio thread
+absolute start times. So is the unused `title` bed.
+
+**The three beds are recordings**: `src/audio/{store,duel,finale}-loop.ogg` are
+ACE-Step 1.5 renders, and they are the only samples in the game. Four things
+about them matter:
+
+- **They are all in G major**, at the tempo of the pattern each replaced (132,
+  146, 152), and so is `STRINGS`. A duel plays those pitches straight over
+  whatever bed is running, so a bed in another key makes every *correct* answer
+  sound wrong. This is the constraint to respect if you ever regenerate one.
+- **They are cut to loop.** A raw generation opens with an intro and closes with
+  a fade-out, which seams audibly every pass. `tools/loopify.py` takes a 16-bar
+  region starting on a downbeat, searches ±half a bar for the end whose following
+  audio best continues the start, and crossfades that material back over the head.
+- **Their levels are measured, not judged by ear.** `BEDS[name].gain` puts the
+  store bed 2 dB under the arrangement it replaced — a continuous recording at
+  equal RMS crowds the effects over it — then holds the other two at their
+  original level *relative* to it, so the duel still drops back and the finale
+  still opens up. The measurement is in the comment above `BEDS`.
+- **They fail soft.** If a file will not load or decode, `setMusic` falls back to
+  that bed's `PATTERNS` entry and the game sounds exactly as it used to. That is
+  deliberate, and it is also why you cannot tell by ear whether the files
+  arrived — `node tools/bed-check.mjs` asserts the buffer sources specifically.
+
+Regenerating one:
+
+```sh
+python tools/gen-music.py <outdir> tools/music-spec.json   # ACE-Step 1.5 + a GPU
+python tools/loopify.py take.wav loop.wav --bars 16 --bpm 132
+ffmpeg -i loop.wav -ac 1 -ar 44100 -c:a libvorbis -q:a 4 src/audio/store-loop.ogg
+ffmpeg -i loop.wav -ac 1 -ar 44100 -c:a aac -b:a 96k  src/audio/store-loop.m4a
+```
+
+`tools/music-spec.json` holds every prompt that was auditioned, shipped one
+first. Mono, because nothing in a bed is panned and stereo doubled the download
+for nothing. Vorbis is preferred at load time and AAC is the Safari fallback:
+both `decodeAudioData` faithfully, where MP3's encoder padding would tick at the
+wrap. Re-rendering gives a *new* take — the seed ACE-Step reports back is not the
+one you passed it — so keep the files rather than expecting to reproduce them.
+
+---
+
 ## Building and testing
 
 ```sh
@@ -182,6 +233,7 @@ npm run preview        # serve the build on :4174
 
 node tools/smoke.mjs   # 55 checks in a real browser against dist/
 node tools/gamepad.mjs # 22 checks driving a synthetic Xbox pad
+node tools/bed-check.mjs             # 19 checks: the beds loaded, not the fallback
 node tools/shots.mjs   # screenshots of every scene into shots/
 node tools/shots.mjs duel raccoon    # or just some of them
 ```
@@ -224,7 +276,13 @@ src/
   core/
     Input.js           gamepad + keyboard + touch -> one InputState, x2 players
     touch.js           SHARED mobile layer — see the warning below
-    Audio.js           Karplus-Strong banjo, SFX, and the backing band
+    Audio.js           Karplus-Strong banjo, SFX, the backing band, and the
+                       three recorded beds
+  audio/
+    store-loop.ogg     the only samples in the game — see The music above
+    duel-loop.ogg
+    finale-loop.ogg
+    *.m4a              the same loops for Safari, which will not decode Vorbis
     MathUtils.js       frame-rate-independent damping
     Rng.js             seeded mulberry32
   net/

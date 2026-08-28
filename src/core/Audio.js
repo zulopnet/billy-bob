@@ -1,6 +1,8 @@
-// core/Audio.js — every sound in this game, generated from nothing.
+// core/Audio.js — every sound in this game, generated from nothing, with one
+// deliberate exception: the three backing beds. See BEDS below.
 //
-// There are no audio files here and no samples. Two things live in this module:
+// Apart from those three loops there are no samples. Three things live in this
+// module:
 //
 //   1. A Karplus-Strong plucked string, rendered offline into an AudioBuffer
 //      and cached per pitch. This is what makes the chocolate banjo sound like
@@ -11,7 +13,10 @@
 //   2. A lookahead step sequencer for the backing music. `setTimeout` is far
 //      too jittery to place notes on a beat, so the timer only ever *schedules*
 //      — every note is given an absolute `AudioContext.currentTime` and the
-//      audio thread places it to the sample.
+//      audio thread places it to the sample. Every bed still runs on this;
+//      the store bed prefers a file and falls back to it.
+//
+//   3. A recorded-bed player, for the three backing loops.
 //
 // All melodies here are original. The duel phrases are generated at runtime
 // from a pentatonic set (see PENTATONIC below), which is also why a child
@@ -42,6 +47,61 @@ export const STRING_COLORS_HEX = [0x57d96a, 0xef4a4a, 0x4aa8ef, 0xf5d130]
 
 /** G major pentatonic, two octaves, for the backing melodies. */
 const PENTATONIC = [55, 57, 59, 62, 64, 67, 69, 71, 74, 76]
+
+// ===========================================================================
+// The recorded beds
+// ===========================================================================
+//
+// The only samples in this game. Each is an ACE-Step 1.5 render — the prompts
+// that produced them are in tools/music-spec.json — cut to a 16-bar region on a
+// downbeat and wrap-crossfaded by tools/loopify.py so `loop = true` has no
+// audible seam. A raw generation opens with an intro and closes with a
+// fade-out, and seams badly every pass.
+//
+// All three are in G major, at the tempo of the pattern each replaces, and that
+// is not cosmetic: STRINGS is a G major set and a duel plays those pitches
+// straight over whatever bed is running, so a bed in another key makes every
+// *correct* answer sound wrong.
+//
+// Vorbis first, because decodeAudioData hands back exactly the encoded sample
+// count and the loop point stays sample-accurate; MP3 and AAC carry encoder
+// padding that shows up as a tick at the wrap. The AAC files are only there for
+// Safari, which will not decode Vorbis. Mono, because nothing in a bed is
+// panned and stereo doubled the download for nothing.
+//
+// `gain` is measured, not guessed. Over 20s through the same graph the
+// generated arrangements run -15.0 (store), -15.9 (duel) and -13.1 dB RMS
+// (finale), and these files -17.0, -17.2 and -18.3. The numbers below put the
+// store bed 2 dB under the arrangement it replaces — a continuous recording at
+// equal RMS crowds the effects that play over it — and then hold the other two
+// at their original level *relative to the store bed*, so the game keeps its
+// dynamic arc: the duel drops back, the finale opens up.
+const BEDS = {
+  store: {
+    bpm: 132,
+    gain: 1.0,
+    sources: [
+      ['audio/ogg; codecs=vorbis', new URL('../audio/store-loop.ogg', import.meta.url).href],
+      ['audio/mp4; codecs=mp4a.40.2', new URL('../audio/store-loop.m4a', import.meta.url).href],
+    ],
+  },
+  duel: {
+    bpm: 146,
+    gain: 0.92,
+    sources: [
+      ['audio/ogg; codecs=vorbis', new URL('../audio/duel-loop.ogg', import.meta.url).href],
+      ['audio/mp4; codecs=mp4a.40.2', new URL('../audio/duel-loop.m4a', import.meta.url).href],
+    ],
+  },
+  finale: {
+    bpm: 152,
+    gain: 1.45,
+    sources: [
+      ['audio/ogg; codecs=vorbis', new URL('../audio/finale-loop.ogg', import.meta.url).href],
+      ['audio/mp4; codecs=mp4a.40.2', new URL('../audio/finale-loop.m4a', import.meta.url).href],
+    ],
+  },
+}
 
 // ===========================================================================
 // Karplus-Strong
@@ -169,6 +229,17 @@ export class Audio {
     this._master = null
     this._musicGain = null
     this._sfxGain = null
+    this._bedGain = null
+
+    // --- recorded bed state ------------------------------------------------
+    /** @type {AudioBufferSourceNode|null} */
+    this._bedSource = null
+    /** @type {Map<string, Promise<AudioBuffer>>} */
+    this._bedBuffers = new Map()
+    /** Beds whose file would not load or decode — never retried. */
+    this._bedFailed = new Set()
+    /** Bumped on every music change, so a slow decode cannot start late. */
+    this._bedToken = 0
 
     // --- sequencer state ---------------------------------------------------
     this._timer = null
@@ -202,6 +273,13 @@ export class Audio {
       this._sfxGain = this.ctx.createGain()
       this._sfxGain.gain.value = 0.9
       this._sfxGain.connect(this._master)
+
+      // The bed hangs off the music bus, so duckMusic() still ducks it.
+      // One node for whichever bed is playing — only ever one at a time. Its
+      // level is set per bed when that bed starts, from BEDS[name].gain.
+      this._bedGain = this.ctx.createGain()
+      this._bedGain.gain.value = 1
+      this._bedGain.connect(this._musicGain)
     }
     try {
       if (this.ctx.state !== 'running') await this.ctx.resume()
@@ -209,6 +287,12 @@ export class Audio {
       return false
     }
     this.ready = this.ctx.state === 'running'
+    // Fetch and decode now rather than at the first setMusic() — unlock()
+    // happens on the title screen, and a bed that arrives a second into play
+    // is a bed that starts audibly late.
+    if (this.ready) {
+      for (const name of Object.keys(BEDS)) this._bedBuffer(name).catch(() => {})
+    }
     return this.ready
   }
 
@@ -545,14 +629,23 @@ export class Audio {
   // -------------------------------------------------------------------------
 
   /**
-   * Start (or switch) the music.
+   * Start (or switch) the music. A name in BEDS plays its recording;
+   * everything else — and any bed whose file failed — plays its PATTERN.
    *
    * @param {'title'|'store'|'duel'|'finale'|null} name  null stops the music
-   * @param {object} [opts] `{ intensity }` 0..1, scales the arrangement density
+   * @param {object} [opts] `{ intensity }` 0..1. Scales arrangement density for
+   *                        a generated pattern, and level for a recorded bed.
    */
   setMusic(name, opts = {}) {
     if (!this.ready) return
     this._intensity = opts.intensity ?? 1
+
+    // A generated pattern answers `intensity` by adding and dropping parts. A
+    // recording cannot thin its own arrangement, so for a bed it becomes a
+    // level ride instead — slow, because a fast one reads as a mistake. Ride
+    // the bed that is about to play, not the one leaving, or a switch lands at
+    // the wrong level for a beat.
+    this._rideBed(BEDS[name] ? name : this._patternName)
 
     if (name === this._patternName) return
     this._patternName = name
@@ -562,6 +655,24 @@ export class Audio {
       return
     }
 
+    if (BEDS[name] && !this._bedFailed.has(name)) {
+      this._stopPattern()
+      this._startBed(name)
+      return
+    }
+    this._stopBed()
+    this._startPattern(name)
+  }
+
+  stopMusic() {
+    this._bedToken++
+    this._stopBed()
+    this._stopPattern()
+    this._patternName = null
+  }
+
+  /** Run one of the generated arrangements. */
+  _startPattern(name) {
     const P = PATTERNS[name]
     if (!P) return
     this._pattern = P
@@ -576,13 +687,82 @@ export class Audio {
     }
   }
 
-  stopMusic() {
+  _stopPattern() {
     if (this._timer !== null) {
       clearInterval(this._timer)
       this._timer = null
     }
     this._pattern = null
-    this._patternName = null
+  }
+
+  /** Fetch + decode a bed, once. The promise is the cache entry. */
+  _bedBuffer(name) {
+    const cached = this._bedBuffers.get(name)
+    if (cached) return cached
+
+    const sources = BEDS[name].sources
+    const probe = document.createElement('audio')
+    const pick = sources.find(([type]) => probe.canPlayType(type)) || sources[0]
+
+    const p = fetch(pick[1])
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status} for ${pick[1]}`)
+        return r.arrayBuffer()
+      })
+      .then((b) => this.ctx.decodeAudioData(b))
+      .catch((e) => {
+        this._bedFailed.add(name)
+        throw e
+      })
+    this._bedBuffers.set(name, p)
+    return p
+  }
+
+  /**
+   * Start a recorded bed, or fall back to its generated arrangement.
+   *
+   * The fallback is the point of the whole shape: a missing file, an offline
+   * reload or a browser that will not decode either codec must not leave the
+   * store silent, and the patterns need nothing but an AudioContext.
+   */
+  _startBed(name) {
+    const token = ++this._bedToken
+    this._bedBuffer(name)
+      .then((buf) => {
+        // The music may have moved on while this was decoding.
+        if (token !== this._bedToken || this._patternName !== name || !this.ready) return
+        this._stopBed()
+        const src = this.ctx.createBufferSource()
+        src.buffer = buf
+        src.loop = true
+        src.connect(this._bedGain)
+        src.start()
+        this._bedSource = src
+      })
+      .catch(() => {
+        if (token !== this._bedToken || this._patternName !== name) return
+        this._startPattern(name)
+      })
+  }
+
+  /** Set the bed bus to one bed's level, scaled by the current intensity. */
+  _rideBed(name) {
+    if (!this._bedGain) return
+    const spec = BEDS[name]
+    if (!spec) return
+    this._bedGain.gain.setTargetAtTime(
+      spec.gain * (0.55 + 0.45 * this._intensity), this.ctx.currentTime, 0.4)
+  }
+
+  _stopBed() {
+    if (!this._bedSource) return
+    try {
+      this._bedSource.stop()
+    } catch (e) {
+      // Already stopped; the node is single-use either way.
+    }
+    this._bedSource.disconnect()
+    this._bedSource = null
   }
 
   /** Ramp the music volume — used to duck under the duel countdown. */
